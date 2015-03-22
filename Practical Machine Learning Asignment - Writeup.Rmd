@@ -1,0 +1,81 @@
+---
+title: "Practical Machine Learning Assignment"
+author: "Kiran"
+date: "Sunday, March 22, 2015"
+output: html_document
+---
+
+###Loading the data:
+The data was downloaded from the following urls:
+training set: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+test set: https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+Data has been dowloaded and stored on the C drive.
+75% of the data is used for training and the rest for validation.
+```{r}
+TriningData <- read.csv('C:/pml-training.csv');
+library(caret);
+InTrain <- createDataPartition(y = TriningData$classe, p=0.75, list = F);
+training <- TriningData[InTrain,];
+testing <- TriningData[-InTrain,];
+```
+
+###Removing variables which are not features
+we can see there are many sensor output which mostly is empty. Removing all such variables.
+```{r, results='hide'}
+head(training);
+summary(training);
+training <- training[,c("roll_belt", "pitch_belt", "yaw_belt", "total_accel_belt", "gyros_belt_x", "gyros_belt_y", "gyros_belt_z", "accel_belt_x", "accel_belt_y", "accel_belt_z", "magnet_belt_x", "magnet_belt_y", "magnet_belt_z", "roll_arm", "pitch_arm", "yaw_arm", "total_accel_arm", "gyros_arm_x", "gyros_arm_y", "gyros_arm_z", "accel_arm_x", "accel_arm_y", "accel_arm_z", "magnet_arm_x", "magnet_arm_y", "magnet_arm_z", "roll_dumbbell", "pitch_dumbbell", "yaw_dumbbell", "total_accel_dumbbell", "gyros_dumbbell_x", "gyros_dumbbell_y", "gyros_dumbbell_z", "accel_dumbbell_x", "accel_dumbbell_y", "accel_dumbbell_z", "magnet_dumbbell_x", "magnet_dumbbell_y", "magnet_dumbbell_z", "roll_forearm", "pitch_forearm", "yaw_forearm", "total_accel_forearm", "gyros_forearm_x", "gyros_forearm_y", "gyros_forearm_z", "accel_forearm_x", "accel_forearm_y", "accel_forearm_z", "magnet_forearm_x", "magnet_forearm_y", "magnet_forearm_z", "classe")]
+```
+
+###Removing variables which are highly correlated:
+Some of the variables would be highly correlated. Removing some of the variables which will not have much effect.
+```{r}
+##Calculates Pairwise correlation
+pairwiseCor <- function(dataframe){
+  pairs <- combn(names(dataframe), 2, simplify=FALSE)
+  df <- data.frame(Vairable1=rep(0,length(pairs)), Variable2=rep(0,length(pairs)), 
+                   AbsCor=rep(0,length(pairs)), Cor=rep(0,length(pairs)))
+  for(i in 1:length(pairs)){
+    df[i,1] <- pairs[[i]][1]
+    df[i,2] <- pairs[[i]][2]
+    df[i,3] <- round(abs(cor(dataframe[,pairs[[i]][1]], dataframe[,pairs[[i]][2]])),4)
+    df[i,4] <- round(cor(dataframe[,pairs[[i]][1]], dataframe[,pairs[[i]][2]]),4)
+  }
+  pairwiseCorDF <- df
+  pairwiseCorDF <- pairwiseCorDF[order(pairwiseCorDF$AbsCor, decreasing=TRUE),]
+  row.names(pairwiseCorDF) <- 1:length(pairs)
+  pairwiseCorDF <<- pairwiseCorDF
+  pairwiseCorDF
+  }
+
+
+training.cor <- pairwiseCor(training[, names(training) != 'classe'])
+training.cor[training.cor$AbsCor>0.8,];
+
+##Removing highly correlated columns
+training <- training[,c("yaw_belt", "gyros_belt_x", "gyros_belt_y", "gyros_belt_z", "accel_belt_x", "accel_belt_y", "accel_belt_z", "magnet_belt_x", "magnet_belt_y", "magnet_belt_z", "roll_arm", "pitch_arm", "yaw_arm", "total_accel_arm", "gyros_arm_x", "gyros_arm_y", "gyros_arm_z", "accel_arm_x", "accel_arm_y", "accel_arm_z", "magnet_arm_x", "magnet_arm_y", "magnet_arm_z", "roll_dumbbell", "pitch_dumbbell", "yaw_dumbbell", "total_accel_dumbbell", "gyros_dumbbell_x", "gyros_dumbbell_y", "accel_dumbbell_x", "accel_dumbbell_y", "accel_dumbbell_z", "magnet_dumbbell_x", "magnet_dumbbell_y", "magnet_dumbbell_z", "roll_forearm", "pitch_forearm", "yaw_forearm", "total_accel_forearm", "gyros_forearm_x", "gyros_forearm_y", "accel_forearm_x", "accel_forearm_y", "accel_forearm_z", "magnet_forearm_x", "magnet_forearm_y", "magnet_forearm_z", "classe")]
+```
+
+
+Building the prediction model:
+I am using the prediction method 'boosting with trees' because:
+1. The data is non-linear.
+2. The different sensor data may be week predictors and this method will combine them to give strong predictors.
+```{r cache=TRUE}
+set.seed(1000);
+predictModel <- train(classe ~ ., method = 'gbm', data = training, verbose = F);
+```
+
+###Predicting the Training set:
+```{r}
+prediction <- predict(predictModel,training);
+table(prediction, prediction == training$classe);
+```
+
+###Predicting the Testing set: Out of sample error:
+```{r}
+prediction <- predict(predictModel,testing);
+table(prediction, prediction == testing$classe);
+```
+As expected the error ratio is higher in the testing set.
